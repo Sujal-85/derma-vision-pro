@@ -1,10 +1,15 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Menu, Camera, BarChart3, User, Settings } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Menu, Camera, BarChart3, User, Settings, LogOut } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const navigate = useNavigate();
+  const { user, signOut, loading } = useAuth();
 
   const navItems = [
     { name: "Analyze", href: "#analyze", icon: Camera },
@@ -41,10 +46,45 @@ const Navigation = () => {
 
           {/* Desktop Actions */}
           <div className="hidden md:flex items-center space-x-4">
-            <Button variant="outline">Sign In</Button>
-            <Button className="bg-gradient-primary hover:shadow-professional">
-              Get Started
-            </Button>
+            {!loading && (
+              user ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="flex items-center space-x-2">
+                      <User className="w-4 h-4" />
+                      <span>{user.email?.split('@')[0]}</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuItem onClick={() => navigate('#profile')}>
+                      <User className="w-4 h-4 mr-2" />
+                      Profile
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate('#settings')}>
+                      <Settings className="w-4 h-4 mr-2" />
+                      Settings
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={signOut}>
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Sign Out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <>
+                  <Button variant="outline" onClick={() => navigate('/auth')}>
+                    Sign In
+                  </Button>
+                  <Button 
+                    className="bg-gradient-primary hover:shadow-professional"
+                    onClick={() => navigate('/auth')}
+                  >
+                    Get Started
+                  </Button>
+                </>
+              )
+            )}
           </div>
 
           {/* Mobile Menu */}
@@ -68,12 +108,45 @@ const Navigation = () => {
                   </a>
                 ))}
                 <div className="pt-6 border-t border-border space-y-4">
-                  <Button variant="outline" className="w-full">
-                    Sign In
-                  </Button>
-                  <Button className="w-full bg-gradient-primary">
-                    Get Started
-                  </Button>
+                  {!loading && (
+                    user ? (
+                      <div className="space-y-3">
+                        <div className="text-sm text-muted-foreground">
+                          Signed in as {user.email?.split('@')[0]}
+                        </div>
+                        <Button 
+                          variant="outline" 
+                          className="w-full"
+                          onClick={signOut}
+                        >
+                          <LogOut className="w-4 h-4 mr-2" />
+                          Sign Out
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <Button 
+                          variant="outline" 
+                          className="w-full"
+                          onClick={() => {
+                            navigate('/auth');
+                            setIsOpen(false);
+                          }}
+                        >
+                          Sign In
+                        </Button>
+                        <Button 
+                          className="w-full bg-gradient-primary"
+                          onClick={() => {
+                            navigate('/auth');
+                            setIsOpen(false);
+                          }}
+                        >
+                          Get Started
+                        </Button>
+                      </>
+                    )
+                  )}
                 </div>
               </div>
             </SheetContent>
