@@ -4,7 +4,7 @@ import heroImage from "@/assets/hero-skincare.jpg";
 
 const Hero = () => {
   return (
-    <section className="pt-24 pb-16 bg-gradient-to-br from-background via-accent/20 to-background">
+    <section className="pt-[30px] pb-14 bg-gradient-to-br from-background via-accent/20 to-background">
       <div className="container mx-auto px-4">
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           {/* Content */}

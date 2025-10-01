@@ -6,14 +6,22 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-
+# Python virtual environment directories
+.venv/
+venv/
+env/
+ENV/
 node_modules
 dist
 dist-ssr
 *.local
 
+# Environment files
+.env
+.env.*
+!.env.example
 # Editor directories and files
-.vscode/*
+.vscode
 !.vscode/extensions.json
 .idea
 .DS_Store
