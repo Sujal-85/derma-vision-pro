@@ -5,6 +5,7 @@ import CameraCapture from "@/components/CameraCapture";
 import AnalysisDashboard from "@/components/AnalysisDashboard";
 import Footer from "@/components/Footer";
 
+
 const Index = () => {
   return (
     <div className="min-h-screen bg-background">

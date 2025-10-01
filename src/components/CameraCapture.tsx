@@ -12,6 +12,9 @@ import {
   User,
   Zap
 } from "lucide-react";
+import { createAnalysis, analyzeSkin } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
+import AnalysisDashboard from "./AnalysisDashboard";
 
 const CameraCapture = () => {
   const [isCapturing, setIsCapturing] = useState(false);
@@ -19,6 +22,24 @@ const CameraCapture = () => {
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { user } = useAuth();
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const [analysisData, setAnalysisData] = useState<any>(null);
+  const [connectionStatus, setConnectionStatus] = useState<string>("Unknown");
+
+  const testConnection = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/skin/test');
+      if (response.ok) {
+        setConnectionStatus("Connected ✅");
+      } else {
+        setConnectionStatus("Backend Error ❌");
+      }
+    } catch (error) {
+      setConnectionStatus("Disconnected ❌");
+    }
+  };
 
   const handleImageCapture = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -32,6 +53,47 @@ const CameraCapture = () => {
     }
   };
 
+  const handleCameraCapture = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: 'user'
+        } 
+      });
+      
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      video.play();
+      
+      // Create a canvas to capture the image
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      video.addEventListener('loadedmetadata', () => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        // Draw the video frame to canvas
+        ctx?.drawImage(video, 0, 0);
+        
+        // Convert to data URL
+        const dataURL = canvas.toDataURL('image/jpeg', 0.8);
+        setCapturedImage(dataURL);
+        
+        // Stop the camera
+        stream.getTracks().forEach(track => track.stop());
+        
+        // Start analysis
+        startAnalysis();
+      });
+    } catch (error) {
+      console.error('Camera access failed:', error);
+      setSaveError('Camera access failed. Please use file upload instead.');
+    }
+  };
+
   const startAnalysis = () => {
     setIsAnalyzing(true);
     setAnalysisProgress(0);
@@ -42,11 +104,63 @@ const CameraCapture = () => {
         if (prev >= 100) {
           clearInterval(interval);
           setIsAnalyzing(false);
+          // After fake analysis completes, persist to backend
+          void persistAnalysis();
           return 100;
         }
         return prev + 10;
       });
     }, 300);
+  };
+
+  const persistAnalysis = async () => {
+    if (!capturedImage) return;
+    setSaveError(null);
+    try {
+      // Call medical-grade Python analyzer via Node proxy
+      let analysisResults: any | null = null;
+      try {
+        console.log("Starting skin analysis...");
+        analysisResults = await analyzeSkin({ imageDataUrl: capturedImage });
+        console.log("Analysis results received:", analysisResults);
+      } catch (e) {
+        console.error("Analysis failed:", e);
+        setSaveError(`Medical analysis failed: ${e instanceof Error ? e.message : 'Unknown error'}. Please check if all services are running.`);
+        return;
+      }
+
+      if (!analysisResults) {
+        setSaveError("No analysis results received. Please try again.");
+        return;
+      }
+
+      // Use real medical-grade analysis results
+      const payload = {
+        userId: user?.id ?? null,
+        imageDataUrl: capturedImage,
+        metrics: {
+          hydration: analysisResults.metrics?.hydration || 0,
+          elasticity: analysisResults.metrics?.elasticity || 0,
+          uvProtection: analysisResults.metrics?.uvProtection || 0,
+          texture: analysisResults.metrics?.texture || 0,
+          overallScore: analysisResults.metrics?.overallScore || 0,
+        },
+        concerns: analysisResults.concerns || [],
+        recommendations: analysisResults.recommendations || [],
+        // Store additional medical-grade data
+        detailedAnalysis: analysisResults.detailed_analysis,
+        redFlags: analysisResults.red_flags || [],
+        confidenceLevel: analysisResults.confidence_level,
+        analysisSummary: analysisResults.analysis_summary,
+        disclaimer: analysisResults.disclaimer,
+      };
+      
+      const res = await createAnalysis(payload);
+      setSavedId(res._id);
+      setAnalysisData(analysisResults);
+    } catch (e: any) {
+      setSaveError(e.message || "Failed to save analysis");
+    }
   };
 
   const captureGuidelines = [
@@ -92,6 +206,18 @@ const CameraCapture = () => {
                 <CardDescription>
                   Take or upload a clear photo of your face
                 </CardDescription>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-sm text-muted-foreground">Service Status:</span>
+                  <span className="text-sm font-medium">{connectionStatus}</span>
+                  <Button 
+                    onClick={testConnection}
+                    variant="outline" 
+                    size="sm"
+                    className="ml-2"
+                  >
+                    Test Connection
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* Image Preview or Capture Zone */}
@@ -117,7 +243,7 @@ const CameraCapture = () => {
                   ) : (
                     <div 
                       className="w-full h-64 border-2 border-dashed border-primary/30 rounded-lg flex items-center justify-center bg-accent/10 hover:bg-accent/20 transition-colors cursor-pointer"
-                      onClick={() => fileInputRef.current?.click()}
+                      onClick={handleCameraCapture}
                     >
                       <div className="text-center space-y-2">
                         <Camera className="w-12 h-12 mx-auto text-primary/60" />
@@ -143,12 +269,19 @@ const CameraCapture = () => {
                 {/* Action Buttons */}
                 <div className="flex gap-3">
                   <Button 
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={handleCameraCapture}
                     className="flex-1 bg-gradient-primary"
                     disabled={isAnalyzing}
                   >
                     <Camera className="w-4 h-4 mr-2" />
                     {capturedImage ? "Retake Photo" : "Capture Photo"}
+                  </Button>
+                  <Button 
+                    onClick={() => fileInputRef.current?.click()}
+                    variant="outline"
+                    disabled={isAnalyzing}
+                  >
+                    Upload File
                   </Button>
                   {capturedImage && !isAnalyzing && (
                     <Button variant="outline" onClick={startAnalysis}>
@@ -221,6 +354,12 @@ const CameraCapture = () => {
                         </div>
                       </div>
                     </div>
+                    {savedId && (
+                      <div className="text-xs text-muted-foreground mt-2">Saved ID: {savedId}</div>
+                    )}
+                    {saveError && (
+                      <div className="text-xs text-red-600 mt-2">{saveError}</div>
+                    )}
                     <Button className="w-full mt-4 bg-gradient-primary">
                       View Detailed Results
                     </Button>
@@ -231,6 +370,13 @@ const CameraCapture = () => {
           </div>
         </div>
       </div>
+      
+      {/* Medical-Grade Analysis Dashboard */}
+      {analysisData && (
+        <div className="mt-16">
+          <AnalysisDashboard analysisData={analysisData} />
+        </div>
+      )}
     </section>
   );
 };
