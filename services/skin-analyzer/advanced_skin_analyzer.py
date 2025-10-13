@@ -54,6 +54,8 @@ class AdvancedSkinAnalyzer:
         
         # Load or create age prediction model
         self.age_model = self._load_or_create_age_model()
+        # Optionally load quantile age model for predictive intervals
+        self.age_quantile_model = self._load_quantile_age_model()
         
         # Skin health parameters
         self.skin_health_params = {
@@ -139,6 +141,17 @@ class AdvancedSkinAnalyzer:
             return keras.models.load_model(model_path)
         else:
             return self._create_age_model()
+
+    def _load_quantile_age_model(self):
+        """Load quantile regression age model if present (predicts q10, q50, q90)."""
+        try:
+            model_path = 'models/age_model_quantile.h5'
+            if os.path.exists(model_path):
+                # compile=False avoids needing custom loss during inference
+                return keras.models.load_model(model_path, compile=False)
+        except Exception as e:
+            print(f"Quantile age model load error: {e}")
+        return None
     
     def _create_age_model(self):
         """Create age prediction model"""
@@ -305,6 +318,122 @@ class AdvancedSkinAnalyzer:
         except Exception as e:
             print(f"Local age prediction error: {e}")
             return 28  # Default age
+
+    def predict_age_with_uncertainty(self, image: np.ndarray) -> Dict[str, Any]:
+        """Predict age using an ensemble and return an adaptive age range.
+
+        Methods used:
+        - Azure Face API (if configured)
+        - Local landmark-based estimate
+        - Local skin-feature estimate
+        - CNN regression model (if available)
+        """
+        methods_used: List[str] = []
+        preds: List[float] = []
+
+        # Azure
+        try:
+            azure_age = self.predict_age_azure(image)
+            if azure_age is not None:
+                preds.append(float(azure_age))
+                methods_used.append("azure")
+        except Exception:
+            pass
+
+        # Local combined
+        try:
+            local_age = self.predict_age_local(image)
+            if local_age is not None:
+                preds.append(float(local_age))
+                methods_used.append("local")
+        except Exception:
+            pass
+
+        # Skin feature only (to diversify ensemble)
+        try:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            skin_age = float(self._estimate_age_from_skin_features(gray))
+            preds.append(skin_age)
+            methods_used.append("skin_features")
+        except Exception:
+            pass
+
+        # CNN model prediction if available
+        cnn_age = None
+        try:
+            if hasattr(self, "age_model") and self.age_model is not None:
+                x = self._preprocess_image_for_model(image)
+                pred = self.age_model.predict(x, verbose=0)
+                cnn_age = float(pred[0][0])
+                preds.append(cnn_age)
+                methods_used.append("cnn")
+        except Exception:
+            pass
+
+        # Quantile model prediction (q10, q50, q90) if available
+        q_range = None
+        try:
+            if hasattr(self, "age_quantile_model") and self.age_quantile_model is not None:
+                x = self._preprocess_image_for_model(image)
+                qpred = self.age_quantile_model.predict(x, verbose=0)
+                if qpred is not None:
+                    q = qpred[0]
+                    if q.shape[-1] >= 3:
+                        q10 = float(q[0]); q50 = float(q[1]); q90 = float(q[2])
+                        preds.append(q50)
+                        methods_used.append("quantile")
+                        q_low = max(18.0, min(80.0, q10))
+                        q_high = max(18.0, min(80.0, q90))
+                        if q_low <= q_high:
+                            q_range = (q_low, q_high)
+        except Exception:
+            pass
+
+        # Fallback if nothing worked
+        if not preds:
+            preds = [28.0]
+            methods_used.append("default")
+
+        mean_age = float(np.mean(preds))
+        std_age = float(np.std(preds)) if len(preds) > 1 else 3.0
+
+        # Compute final age range
+        if q_range is not None:
+            # Use quantile-based interval when available
+            min_age = int(np.floor(q_range[0]))
+            max_age = int(np.ceil(q_range[1]))
+        else:
+            # Adaptive half-range: widen when predictors disagree, clamp to sensible bounds
+            half_range = max(3.0, min(10.0, 1.96 * std_age))
+            min_age = int(max(18, np.floor(mean_age - half_range)))
+            max_age = int(min(80, np.ceil(mean_age + half_range)))
+            if max_age - min_age < 4:  # ensure minimum range width
+                pad = (5 - (max_age - min_age)) // 2 + 1
+                min_age = max(18, min_age - pad)
+                max_age = min(80, max_age + pad)
+
+        # Confidence heuristic based on disagreement
+        if std_age < 2.5:
+            confidence = "high"
+        elif std_age < 5:
+            confidence = "medium"
+        else:
+            confidence = "low"
+
+        return {
+            "age": float(np.clip(mean_age, 18, 80)),
+            "age_range": {
+                "min": min_age,
+                "max": max_age,
+                "label": f"{min_age}-{max_age}",
+                "confidence": confidence,
+            },
+            "methods_used": methods_used,
+            "details": {
+                "predictions": preds,
+                "std": std_age,
+            },
+        }
     
     def predict_skin_health(self, image: np.ndarray) -> Dict[str, float]:
         """Predict comprehensive skin health metrics using computer vision"""
@@ -598,10 +727,9 @@ class AdvancedSkinAnalyzer:
         # Use the largest skin region for analysis
         largest_region = max(skin_regions, key=lambda x: x.shape[0] * x.shape[1])
         
-        # Predict age using Azure Face API first, then local model as fallback
-        predicted_age = self.predict_age_azure(largest_region)
-        if predicted_age is None:
-            predicted_age = self.predict_age_local(largest_region)
+        # Predict age using ensemble and compute adaptive range
+        age_info = self.predict_age_with_uncertainty(largest_region)
+        predicted_age = int(round(age_info.get("age", 28)))
         
         # Predict comprehensive skin health
         skin_health_scores = self.predict_skin_health(largest_region)
@@ -645,6 +773,7 @@ class AdvancedSkinAnalyzer:
         
         return {
             "predicted_age": predicted_age,
+            "predicted_age_range": age_info.get("age_range"),
             "overall_skin_health": round(overall_skin_health, 1),
             "skin_health_breakdown": skin_health_scores,
             "metrics": {
@@ -671,7 +800,11 @@ class AdvancedSkinAnalyzer:
                 }
             },
             "red_flags": red_flags,
-            "analysis_summary": f"Comprehensive skin analysis completed. Predicted age: {predicted_age}, Overall skin health: {overall_skin_health:.1f}%. Analysis based on advanced computer vision and medical algorithms.",
+            "analysis_summary": (
+                f"Comprehensive skin analysis completed. Predicted age: {predicted_age}"
+                + (f" (range {age_info.get('age_range', {}).get('label')})" if age_info.get('age_range') else "")
+                + f", Overall skin health: {overall_skin_health:.1f}%. Analysis based on advanced computer vision and medical algorithms."
+            ),
             "disclaimer": "This analysis is not a substitute for professional medical advice, diagnosis, or treatment. Always seek the advice of qualified health providers with questions about medical conditions.",
             "confidence_level": "High" if len(concerns) < 3 and not red_flags else "Moderate" if len(concerns) < 5 else "Requires Professional Review",
             "model_accuracy": "95%+ (Advanced CNN with Azure Face API integration)"

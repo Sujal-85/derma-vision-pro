@@ -4,10 +4,13 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { PDFDocument } from 'pdf-lib';
-import pdfParse from 'pdf-parse';
 import sharp from 'sharp';
+import { fileURLToPath } from 'url';
 
-dotenv.config();
+// Resolve project root .env explicitly so env vars are available even when server starts from different CWD
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 const router = express.Router();
 
 // Configure multer for file uploads
@@ -46,7 +49,8 @@ const upload = multer({
 // API Keys and Configuration
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY;
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+// Read OpenRouter API key per-request to avoid stale values.
+// Mock mode for chat is deprecated: require a valid key for real LLM responses.
 
 // Medical AI System Prompt
 const MEDICAL_AI_PROMPT = `You are Dr. Sarah, an advanced AI medical assistant with comprehensive knowledge of medicine, healthcare, and medical imaging. You specialize in:
@@ -113,6 +117,8 @@ const MEDICAL_SAMPLE_QUESTIONS = [
 async function extractPDFText(filePath) {
   try {
     const dataBuffer = fs.readFileSync(filePath);
+    // Defer importing pdf-parse to avoid module-load side effects
+    const { default: pdfParse } = await import('pdf-parse');
     const data = await pdfParse(dataBuffer);
     return data.text;
   } catch (error) {
@@ -286,6 +292,18 @@ router.get('/sample-questions', (req, res) => {
     questions: MEDICAL_SAMPLE_QUESTIONS
   });
 });
+// Health status for Medical AI
+router.get('/health', (req, res) => {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  const hasKey = !!(apiKey && apiKey !== 'your_openrouter_api_key_here' && apiKey.startsWith('sk-or-v1-'));
+  res.json({
+    success: true,
+    nodeVersion: process.version,
+    fetchAvailable: typeof fetch === 'function',
+    hasOpenRouterKey: hasKey,
+    routes: { chat: true, upload: true, sampleQuestions: true, health: true }
+  });
+});
 
 // Route to upload and analyze files
 router.post('/upload', upload.single('file'), async (req, res) => {
@@ -425,16 +443,16 @@ router.post('/chat', async (req, res) => {
       });
     }
 
-    // Check if API key is configured
-    const isApiKeyConfigured = OPENROUTER_API_KEY && 
-                               OPENROUTER_API_KEY !== 'your_openrouter_api_key_here' && 
-                               OPENROUTER_API_KEY.startsWith('sk-or-v1-');
-    
+    // Require a valid OpenRouter API key for real LLM responses
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    const isApiKeyConfigured = apiKey &&
+                               apiKey !== 'your_openrouter_api_key_here' &&
+                               apiKey.startsWith('sk-or-v1-');
     if (!isApiKeyConfigured) {
-      const mockResponse = generateMockMedicalResponse(message, medicalContext);
-      return res.json({
-        success: true,
-        response: mockResponse
+      console.log('OpenRouter API key not configured or invalid.');
+      return res.status(401).json({
+        success: false,
+        error: 'OpenRouter API key not configured. Set OPENROUTER_API_KEY in your .env.'
       });
     }
 
@@ -499,7 +517,7 @@ Please consider this medical context when providing responses.`;
           response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+              'Authorization': `Bearer ${apiKey}`,
               'Content-Type': 'application/json',
               'HTTP-Referer': 'https://derma-vision-pro.com',
               'X-Title': 'DermaVision Pro Medical AI'
@@ -562,12 +580,9 @@ Please consider this medical context when providing responses.`;
 
   } catch (error) {
     console.error('Error in medical AI chat:', error);
-    
-    const fallbackResponse = generateFallbackMedicalResponse(req.body.message);
-    
-    res.json({
-      success: true,
-      response: fallbackResponse
+    return res.status(502).json({
+      success: false,
+      error: error.message || 'Failed to get response from LLM provider'
     });
   }
 });

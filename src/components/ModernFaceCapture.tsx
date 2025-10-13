@@ -193,9 +193,9 @@ const ModernFaceCapture = ({ onCapture, onBack, isAnalyzing = false, analysisErr
           {/* Header */}
           <div className="text-center mb-12">
             <div className="flex items-center justify-center mb-6">
-              <Button variant="ghost" onClick={onBack} className="absolute left-0">
+              {/* <Button variant="ghost" onClick={onBack} className="absolute left-0">
                 <ArrowLeft className="w-5 h-5" />
-              </Button>
+              </Button> */}
               <div className="flex items-center space-x-3">
                 <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center">
                   <Camera className="w-6 h-6 text-white" />

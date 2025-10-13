@@ -575,9 +575,9 @@ const MedicalRoutineGenerator = ({ analysisData, userProfile, onBack }: MedicalR
           {/* Header */}
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center space-x-4">
-              <Button variant="ghost" onClick={onBack}>
+              {/* <Button variant="ghost" onClick={onBack}>
                 <ArrowLeft className="w-4 h-4" />
-              </Button>
+              </Button> */}
               <div>
                 <h1 className="text-3xl font-bold">Medical-Grade Skincare Routine</h1>
                 <p className="text-muted-foreground">

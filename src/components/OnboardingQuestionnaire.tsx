@@ -460,11 +460,11 @@ const OnboardingQuestionnaire = ({ onComplete, onSkip }: OnboardingQuestionnaire
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              {currentStep > 0 && (
+              {/* {currentStep > 0 && (
                 <Button variant="ghost" size="sm" onClick={handlePrevious}>
                   <ArrowLeft className="w-4 h-4" />
                 </Button>
-              )}
+              )} */}
               <div>
                 <CardTitle>Generate Your Skincare Routine</CardTitle>
                 <CardDescription>

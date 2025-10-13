@@ -294,7 +294,7 @@ const Profile = () => {
                         <Button
                           onClick={handleCancel}
                           variant="outline"
-                          className="border-white/30 text-white hover:bg-white/10"
+                          className="border-white/30 text-black hover:bg-white"
                         >
                           <X className="w-4 h-4 mr-2" />
                           Cancel

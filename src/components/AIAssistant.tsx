@@ -124,6 +124,23 @@ const AIAssistant: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resizeRef = useRef<HTMLDivElement>(null);
 
+  // Determine if chat history should be persisted based on OAuth provider
+  const getUserProvider = () => {
+    try {
+      const meta = (user as any)?.app_metadata;
+      if (meta?.provider) return String(meta.provider).toLowerCase();
+      const ids = (user as any)?.identities;
+      if (Array.isArray(ids) && ids[0]?.provider) return String(ids[0].provider).toLowerCase();
+    } catch {}
+    return null;
+  };
+
+  const shouldPersistChat = () => {
+    const p = getUserProvider();
+    // Do not persist for Google or Microsoft/Azure users
+    return !(p === 'google' || p === 'azure' || p === 'microsoft' || p === 'azuread');
+  };
+
   // Load sample questions on component mount
   useEffect(() => {
     loadSampleQuestions();
@@ -236,6 +253,11 @@ const AIAssistant: React.FC = () => {
   };
 
   const loadChatHistory = () => {
+    // Respect privacy: skip persisting for Google/Microsoft users
+    if (!shouldPersistChat()) {
+      setChatHistory([]);
+      return;
+    }
     // Load from localStorage for now
     const savedHistory = localStorage.getItem('ai-assistant-chat-history');
     if (savedHistory) {
@@ -249,7 +271,10 @@ const AIAssistant: React.FC = () => {
   };
 
   const saveChatHistory = (history: ChatSession[]) => {
-    localStorage.setItem('ai-assistant-chat-history', JSON.stringify(history));
+    // Respect privacy: do not store chats for Google/Microsoft users
+    if (shouldPersistChat()) {
+      localStorage.setItem('ai-assistant-chat-history', JSON.stringify(history));
+    }
     setChatHistory(history);
   };
 

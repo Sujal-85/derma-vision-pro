@@ -111,6 +111,14 @@ const Navigation = () => {
                         <Button 
                           variant="outline" 
                           className="w-full"
+                          onClick={() => navigate('/profile')}
+                        >
+                          <User className="w-4 h-4 mr-2" />
+                          Profile
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          className="w-full"
                           onClick={signOut}
                         >
                           <LogOut className="w-4 h-4 mr-2" />

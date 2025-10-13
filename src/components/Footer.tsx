@@ -11,27 +11,43 @@ import {
   Award,
   Heart
 } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const Footer = () => {
   const footerSections = [
     {
-      title: "Platform",
+      title: "Popular",
       links: [
-        { name: "Skin Analysis", href: "#analysis" },
-        { name: "Dashboard", href: "#dashboard" },
-        { name: "Progress Tracking", href: "#progress" },
-        { name: "API Documentation", href: "#api" }
+        { name: "Home", href: "/" },
+        { name: "AI Assistant", href: "/ai-assistant" },
+        { name: "Analyze", href: "/analyze" },
+        { name: "Dashboard", href: "/dashboard" },
+        { name: "Appointments", href: "/appointments" },
+        { name: "Routine", href: "/routine" },
+        { name: "News", href: "/news" },
+        { name: "Settings", href: "/settings" },
+        { name: "Profile", href: "/profile" },
+        { name: "Sign In", href: "/auth" }
       ]
     },
-    {
-      title: "Solutions",
-      links: [
-        { name: "For Individuals", href: "#individuals" },
-        { name: "For Professionals", href: "#professionals" },
-        { name: "For Clinics", href: "#clinics" },
-        { name: "Enterprise", href: "#enterprise" }
-      ]
-    },
+    // {
+    //   title: "Platform",
+    //   links: [
+    //     { name: "Skin Analysis", href: "#analysis" },
+    //     { name: "Dashboard", href: "#dashboard" },
+    //     { name: "Progress Tracking", href: "#progress" },
+    //     { name: "API Documentation", href: "#api" }
+    //   ]
+    // },
+    // {
+    //   title: "Solutions",
+    //   links: [
+    //     { name: "For Individuals", href: "#individuals" },
+    //     { name: "For Professionals", href: "#professionals" },
+    //     { name: "For Clinics", href: "#clinics" },
+    //     { name: "Enterprise", href: "#enterprise" }
+    //   ]
+    // },
     {
       title: "Resources",
       links: [
@@ -85,7 +101,7 @@ const Footer = () => {
               </p>
 
               {/* Contact Info */}
-              <div className="space-y-3">
+              {/* <div className="space-y-3">
                 <div className="flex items-center space-x-3 text-muted-foreground">
                   <Mail className="w-4 h-4" />
                   <span>support@dermatech.ai</span>
@@ -98,7 +114,7 @@ const Footer = () => {
                   <MapPin className="w-4 h-4" />
                   <span>San Francisco, CA</span>
                 </div>
-              </div>
+              </div> */}
 
               {/* Social Links */}
               <div className="flex space-x-4">
@@ -125,12 +141,21 @@ const Footer = () => {
                     <ul className="space-y-3">
                       {section.links.map((link, linkIndex) => (
                         <li key={linkIndex}>
-                          <a 
-                            href={link.href}
-                            className="text-muted-foreground hover:text-primary transition-colors"
-                          >
-                            {link.name}
-                          </a>
+                          {link.href.startsWith('/') ? (
+                            <Link 
+                              to={link.href}
+                              className="text-muted-foreground hover:text-primary transition-colors"
+                            >
+                              {link.name}
+                            </Link>
+                          ) : (
+                            <a 
+                              href={link.href}
+                              className="text-muted-foreground hover:text-primary transition-colors"
+                            >
+                              {link.name}
+                            </a>
+                          )}
                         </li>
                       ))}
                     </ul>

@@ -37,6 +37,30 @@ export async function createAnalysis(payload: CreateAnalysisPayload) {
   return res.json();
 }
 
+// CSV-based product recommendations via Python service
+export async function recommendProductsByAnalysis(payload: {
+  metrics: {
+    hydration: number;
+    elasticity: number;
+    uvProtection: number;
+    texture: number;
+    overallScore?: number;
+  };
+  concerns: Array<{ type: string; severity?: string; area?: string; trend?: string; confidence?: number }>;
+  topK?: number;
+}) {
+  const res = await fetch(`${API_BASE_URL}/api/skin/recommend`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Failed to fetch Python recommendations: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function getUserAnalyses(userId: string) {
   const res = await fetch(`${API_BASE_URL}/api/analyses/user/${userId}`);
   if (!res.ok) throw new Error(`Failed to fetch analyses: ${res.status}`);

@@ -100,6 +100,21 @@ router.post("/analyze-advanced", upload.single('file'), async (req, res) => {
   }
 });
 
+// Forward recommendations to Python service using analysis metrics/concerns
+router.post("/recommend", async (req, res) => {
+  try {
+    const r = await fetch(`${PY_URL}/recommend`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req.body || {})
+    });
+    const data = await r.json();
+    res.status(r.ok ? 200 : r.status).json(data);
+  } catch (e) {
+    res.status(400).json({ error: String(e) });
+  }
+});
+
 export default router;
 
 
