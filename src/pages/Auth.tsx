@@ -13,6 +13,7 @@ import { toast } from "@/hooks/use-toast";
 import BackButton from "@/components/BackButton";
 import { signInWithGoogle, signInWithMicrosoft } from "@/lib/oauth-service";
 import { isSupabaseConfigured } from "@/integrations/supabase/client";
+import Footer from "@/components/Footer";
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -120,9 +121,10 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-medical-50 to-background flex flex-col items-center justify-center p-4">
-      {/* <BackButton /> */}
-      <div className="w-full max-w-md space-y-6">
+    <>
+      <div className="min-h-screen bg-gradient-to-br from-medical-50 to-background flex flex-col items-center justify-center p-4">
+        {/* <BackButton /> */}
+        <div className="w-full max-w-md space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
           
@@ -416,8 +418,10 @@ const Auth = () => {
             </div>
           </CardContent>
         </Card>
+        </div>
       </div>
-    </div>
+      <Footer />
+    </>
   );
 };
 

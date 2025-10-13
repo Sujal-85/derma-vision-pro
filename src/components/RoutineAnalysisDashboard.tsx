@@ -19,22 +19,23 @@ import {
   AlertTriangle,
   Shield,
   Activity,
-  User,
   Sparkles,
   Clock,
-  Star
+  Star,
+  User
 } from "lucide-react";
 
 interface AnalysisData {
   predicted_age?: number;
+  predicted_age_range?: {
+    min: number;
+    max: number;
+    label: string;
+    confidence?: string;
+  };
   overall_skin_health?: number;
   skin_health_breakdown?: {
-    hydration: number;
-    elasticity: number;
-    texture: number;
-    pigmentation: number;
-    inflammation: number;
-    collagen: number;
+    [key: string]: number;
   };
   metrics: {
     hydration: number;
@@ -202,17 +203,19 @@ const RoutineAnalysisDashboard: React.FC<RoutineAnalysisDashboardProps> = ({
             <TabsContent value="overview" className="space-y-8">
               {/* Age and Overall Health Summary */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                {/* Predicted Age */}
+                {/* Predicted Age Range */}
                 <Card className="bg-gradient-card border-0 shadow-card-hover">
                   <CardContent className="p-6 text-center">
                     <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center mx-auto mb-4">
                       <User className="w-6 h-6 text-white" />
                     </div>
                     <h3 className="text-2xl font-bold text-primary mb-2">
-                      {analysisResults?.predicted_age || 28}
+                      {analysisResults?.predicted_age_range?.label || `${analysisResults?.predicted_age || 28}`}
                     </h3>
-                    <p className="text-sm text-muted-foreground">Predicted Age</p>
-                    <p className="text-xs text-muted-foreground mt-2">For personalized routine targeting</p>
+                    <p className="text-sm text-muted-foreground">Predicted Age Range</p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Approx: {analysisResults?.predicted_age ?? 28}{analysisResults?.predicted_age_range?.confidence ? ` · Confidence: ${analysisResults?.predicted_age_range?.confidence}` : ''}
+                    </p>
                   </CardContent>
                 </Card>
 
@@ -387,28 +390,31 @@ const RoutineAnalysisDashboard: React.FC<RoutineAnalysisDashboardProps> = ({
             </TabsContent>
 
             <TabsContent value="recommendations" className="space-y-6">
-              <div className="grid gap-6">
-                {analysisResults.recommendations.map((rec, index) => (
-                  <Card key={index} className="bg-gradient-card border-0 shadow-card-hover">
-                    <CardHeader>
+              {analysisResults.recommendations.map((rec, index) => (
+                <Card key={index} className="bg-gradient-card border-0 shadow-card-hover">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
                       <CardTitle className="flex items-center gap-2">
                         <Target className="w-5 h-5 text-primary" />
                         {rec.category}
                       </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <ul className="space-y-2">
-                        {rec.items.map((item, itemIndex) => (
-                          <li key={itemIndex} className="flex items-start gap-2">
-                            <ArrowRight className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
-                            <span className="text-sm">{item}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                      <Button size="sm" className="bg-gradient-primary" onClick={onBack}>
+                        Take Progress Photo
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-2">
+                      {rec.items.map((item, itemIndex) => (
+                        <li key={itemIndex} className="flex items-start gap-2">
+                          <ArrowRight className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                          <span className="text-sm">{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              ))}
             </TabsContent>
 
             <TabsContent value="products" className="space-y-6">

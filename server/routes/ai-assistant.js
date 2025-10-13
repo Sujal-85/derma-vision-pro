@@ -1,12 +1,15 @@
 import express from 'express';
 // Using global fetch from Node 18+
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 const router = express.Router();
 
 // OpenRouter API configuration
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
 // Family Doctor AI Assistant system prompt
@@ -207,9 +210,10 @@ router.post('/chat', async (req, res) => {
     const correctedMessage = autoCorrectText(message);
     
     // Check if API key is configured
-    const isApiKeyConfigured = OPENROUTER_API_KEY && 
-                               OPENROUTER_API_KEY !== 'your_openrouter_api_key_here' && 
-                               OPENROUTER_API_KEY.startsWith('sk-or-v1-');
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    const isApiKeyConfigured = apiKey && 
+                               apiKey !== 'your_openrouter_api_key_here' && 
+                               apiKey.startsWith('sk-or-v1-');
     
     console.log('OpenRouter API Key configured:', isApiKeyConfigured);
     
@@ -273,7 +277,7 @@ router.post('/chat', async (req, res) => {
           response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+              'Authorization': `Bearer ${apiKey}`,
               'Content-Type': 'application/json',
               'HTTP-Referer': 'https://derma-vision-pro.com',
               'X-Title': 'DermaVision Pro AI Assistant'

@@ -24,6 +24,7 @@ class SkinModelTrainer:
     def __init__(self):
         self.skin_health_model = None
         self.age_model = None
+        self.age_quantile_model = None
         self.scaler = StandardScaler()
         
         # Create models directory
@@ -111,6 +112,94 @@ class SkinModelTrainer:
             metrics=['mae', 'accuracy']
         )
         
+        return model
+
+    def _make_quantile_loss(self, quantiles):
+        """Pinball loss for multiple quantiles at once.
+        y_true: (batch, ) or (batch, 1)
+        y_pred: (batch, len(quantiles))
+        """
+        qs = tf.constant(quantiles, dtype=tf.float32)
+
+        def quantile_loss(y_true, y_pred):
+            y_true = tf.cast(y_true, tf.float32)
+            if tf.rank(y_true) == 2 and tf.shape(y_true)[-1] == 1:
+                y_true_exp = y_true
+            else:
+                y_true_exp = tf.expand_dims(y_true, axis=-1)
+            e = y_true_exp - y_pred
+            loss = tf.maximum(qs * e, (qs - 1.0) * e)
+            return tf.reduce_mean(loss)
+
+        return quantile_loss
+
+    def create_age_quantile_model(self) -> keras.Model:
+        """Create age quantile model predicting q10, q50, q90 in one head."""
+        inputs = keras.Input(shape=(224, 224, 3))
+        x = layers.RandomFlip("horizontal")(inputs)
+        x = layers.RandomRotation(0.05)(x)
+        x = layers.RandomZoom(0.05)(x)
+        x = layers.RandomBrightness(0.05)(x)
+        x = layers.RandomContrast(0.05)(x)
+
+        for filters in [32, 32]:
+            x = layers.Conv2D(filters, 3, activation='relu', padding='same')(x)
+            x = layers.BatchNormalization()(x)
+        x = layers.MaxPooling2D(2)(x)
+        x = layers.Dropout(0.25)(x)
+
+        for filters in [64, 64]:
+            x = layers.Conv2D(filters, 3, activation='relu', padding='same')(x)
+            x = layers.BatchNormalization()(x)
+        x = layers.MaxPooling2D(2)(x)
+        x = layers.Dropout(0.25)(x)
+
+        for filters in [128, 128]:
+            x = layers.Conv2D(filters, 3, activation='relu', padding='same')(x)
+            x = layers.BatchNormalization()(x)
+        x = layers.MaxPooling2D(2)(x)
+        x = layers.Dropout(0.25)(x)
+
+        for filters in [256, 256]:
+            x = layers.Conv2D(filters, 3, activation='relu', padding='same')(x)
+            x = layers.BatchNormalization()(x)
+        x = layers.MaxPooling2D(2)(x)
+        x = layers.Dropout(0.25)(x)
+
+        x = layers.Conv2D(512, 3, activation='relu', padding='same')(x)
+        x = layers.BatchNormalization()(x)
+        x = layers.GlobalAveragePooling2D()(x)
+
+        x = layers.Dense(1024, activation='relu')(x)
+        x = layers.BatchNormalization()(x)
+        x = layers.Dropout(0.5)(x)
+
+        x = layers.Dense(512, activation='relu')(x)
+        x = layers.BatchNormalization()(x)
+        x = layers.Dropout(0.5)(x)
+
+        x = layers.Dense(256, activation='relu')(x)
+        x = layers.BatchNormalization()(x)
+        x = layers.Dropout(0.3)(x)
+
+        outputs = layers.Dense(3, activation='linear', name='age_quantiles')(x)
+        model = keras.Model(inputs=inputs, outputs=outputs)
+
+        initial_learning_rate = 0.001
+        lr_schedule = keras.optimizers.schedules.ExponentialDecay(
+            initial_learning_rate,
+            decay_steps=1000,
+            decay_rate=0.96,
+            staircase=True
+        )
+
+        qloss = self._make_quantile_loss([0.1, 0.5, 0.9])
+        model.compile(
+            optimizer=keras.optimizers.Adam(learning_rate=lr_schedule),
+            loss=qloss,
+            metrics=['mae']
+        )
+
         return model
     
     def create_age_model(self) -> keras.Model:
@@ -234,6 +323,41 @@ class SkinModelTrainer:
             age_labels.append(age)
         
         return np.array(images), np.array(skin_health_labels), np.array(age_labels)
+
+    def load_utkface_dataset(self, dataset_dir: str, limit: int = None) -> Tuple[np.ndarray, np.ndarray]:
+        """Load UTKFace dataset where filenames are in the format age_gender_race_date.jpg
+        Returns (X_images, y_age). Images are resized to 224x224 and normalized to [0,1].
+        """
+        images: List[np.ndarray] = []
+        ages: List[float] = []
+        if not os.path.isdir(dataset_dir):
+            raise FileNotFoundError(f"UTKFace directory not found: {dataset_dir}")
+
+        count = 0
+        for fname in os.listdir(dataset_dir):
+            if not (fname.lower().endswith('.jpg') or fname.lower().endswith('.jpeg') or fname.lower().endswith('.png')):
+                continue
+            try:
+                # Parse age from filename
+                age_str = fname.split('_')[0]
+                age = float(age_str)
+                # Load image
+                path = os.path.join(dataset_dir, fname)
+                img = cv2.imread(path)
+                if img is None:
+                    continue
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                img = cv2.resize(img, (224, 224))
+                images.append(img.astype(np.float32) / 255.0)
+                ages.append(np.clip(age, 0, 100))
+                count += 1
+                if limit and count >= limit:
+                    break
+            except Exception:
+                continue
+        if not images:
+            raise RuntimeError("No images loaded from UTKFace directory.")
+        return np.stack(images, axis=0), np.array(ages, dtype=np.float32)
     
     def get_azure_age_data(self, image_paths: List[str]) -> List[int]:
         """Get age data from Azure Face API for real images"""
@@ -320,6 +444,49 @@ class SkinModelTrainer:
         print(f"Skin Health Model - Validation Loss: {val_loss:.4f}, MAE: {val_mae:.4f}, Accuracy: {val_acc:.4f}")
         
         return history
+
+    def train_age_quantile_model(self, X: np.ndarray, y: np.ndarray, epochs: int = 100):
+        """Train quantile age model to output predictive intervals (q10,q50,q90)."""
+        print("Training quantile age model...")
+
+        X_train, X_val, y_train, y_val = train_test_split(
+            X, y, test_size=0.2, random_state=42
+        )
+
+        self.age_quantile_model = self.create_age_quantile_model()
+
+        callbacks_list = [
+            callbacks.EarlyStopping(
+                monitor='val_loss',
+                patience=10,
+                restore_best_weights=True
+            ),
+            callbacks.ReduceLROnPlateau(
+                monitor='val_loss',
+                factor=0.5,
+                patience=5,
+                min_lr=1e-7
+            ),
+            callbacks.ModelCheckpoint(
+                'models/age_model_quantile.h5',
+                monitor='val_loss',
+                save_best_only=True
+            )
+        ]
+
+        history = self.age_quantile_model.fit(
+            X_train, y_train,
+            validation_data=(X_val, y_val),
+            epochs=epochs,
+            batch_size=32,
+            callbacks=callbacks_list,
+            verbose=1
+        )
+
+        val_loss, val_mae = self.age_quantile_model.evaluate(X_val, y_val, verbose=0)
+        print(f"Quantile Age Model - Validation Loss: {val_loss:.4f}, MAE: {val_mae:.4f}")
+
+        return history
     
     def train_age_model(self, X: np.ndarray, y: np.ndarray, epochs: int = 100):
         """Train the age prediction model"""
@@ -378,6 +545,10 @@ class SkinModelTrainer:
         if self.age_model:
             self.age_model.save('models/age_model.h5')
             print("Age model saved")
+        
+        if self.age_quantile_model:
+            self.age_quantile_model.save('models/age_model_quantile.h5')
+            print("Quantile age model saved")
     
     def train_all_models(self, num_samples: int = 10000, epochs: int = 100):
         """Train all models with synthetic data"""
@@ -395,6 +566,9 @@ class SkinModelTrainer:
         # Train age model
         self.train_age_model(X, y_age, epochs)
         
+        # Train age quantile model for predictive intervals
+        self.train_age_quantile_model(X, y_age, epochs)
+        
         # Save models
         self.save_models()
         
@@ -403,10 +577,23 @@ class SkinModelTrainer:
 def main():
     """Main training function"""
     trainer = SkinModelTrainer()
-    
-    # Train models with synthetic data
-    # In production, replace with real skin image dataset
-    trainer.train_all_models(num_samples=10000, epochs=100)
+    # If UTKFACE_DIR env var set, train on real dataset; else fall back to synthetic
+    utk_dir = os.getenv('UTKFACE_DIR')
+    if utk_dir and os.path.isdir(utk_dir):
+        print(f"Loading UTKFace dataset from {utk_dir} ...")
+        X_age, y_age = trainer.load_utkface_dataset(utk_dir)
+        # For skin health model, we don't have labels in UTKFace; use synthetic for that head
+        X_synth, y_skin_health, _ = trainer.generate_synthetic_data(num_samples=min(5000, len(X_age)))
+        X_synth = X_synth.astype(np.float32) / 255.0
+
+        # Train models
+        trainer.train_skin_health_model(X_synth, y_skin_health, epochs=50)
+        trainer.train_age_model(X_age, y_age, epochs=50)
+        trainer.train_age_quantile_model(X_age, y_age, epochs=50)
+        trainer.save_models()
+    else:
+        # Train models with synthetic data
+        trainer.train_all_models(num_samples=10000, epochs=100)
     
     print("Training completed successfully!")
     print("Models saved in 'models/' directory")

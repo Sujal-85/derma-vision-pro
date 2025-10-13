@@ -17,15 +17,17 @@ import medicalAIRouter from "./routes/medical-ai.js";
 import doctorsRouter from "./routes/doctors.js";
 import appointmentsRouter from "./routes/appointments.js";
 
-dotenv.config();
+// Get current directory for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load environment variables from project root .env explicitly.
+// This works even if the server is started from the server/ directory.
+dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/derma_vision_pro";
-
-// Get current directory for ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));

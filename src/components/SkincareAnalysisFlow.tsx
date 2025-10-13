@@ -139,6 +139,7 @@ const SkincareAnalysisFlow = () => {
         return (
           <ProductRecommendations
             skinConcerns={analysisResults?.concerns || []}
+            metrics={analysisResults?.metrics}
             userProfile={onboardingData}
             onBack={handleBackToAnalysis}
             onNext={handleProceedToRoutine}

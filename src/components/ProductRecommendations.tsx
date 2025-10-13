@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
 import { 
   ArrowLeft,
   ArrowRight,
@@ -15,6 +16,7 @@ import {
   Shield,
   Truck
 } from "lucide-react";
+import { recommendProductsByAnalysis } from "@/lib/api";
 
 interface Product {
   id: string;
@@ -35,144 +37,77 @@ interface Product {
 
 interface ProductRecommendationsProps {
   skinConcerns: any[];
+  metrics?: {
+    hydration: number;
+    elasticity: number;
+    uvProtection: number;
+    texture: number;
+    overallScore?: number;
+  };
   userProfile: any;
   onBack: () => void;
   onNext: () => void;
 }
 
-const ProductRecommendations = ({ skinConcerns, userProfile, onBack, onNext }: ProductRecommendationsProps) => {
+const ProductRecommendations = ({ skinConcerns, metrics, userProfile, onBack, onNext }: ProductRecommendationsProps) => {
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [filterTag, setFilterTag] = useState<string | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Mock product data based on skin concerns
-  const products: Product[] = [
-    {
-      id: "1",
-      name: "Bright Mineral Sunscreen SPF 30",
-      brand: "EltaMD",
-      price: 35,
-      image: "/api/placeholder/300/300",
-      rating: 4.8,
-      reviews: 1247,
-      tags: ["Eye Bags", "Eye Wrinkles", "Deep Wrinkles"],
-      description: "Broad-spectrum mineral sunscreen with zinc oxide for sensitive skin",
-      benefits: ["UV Protection", "Anti-aging", "Gentle Formula"],
-      ingredients: ["Zinc Oxide", "Niacinamide", "Hyaluronic Acid"],
-      size: "3.0 oz",
-      inStock: true
-    },
-    {
-      id: "2",
-      name: "Anti-Pigment Combi Bundle",
-      brand: "The Ordinary",
-      price: 88,
-      originalPrice: 120,
-      image: "/api/placeholder/300/300",
-      rating: 4.6,
-      reviews: 892,
-      tags: ["Pigmentation", "Dark Circles", "Redness"],
-      description: "Complete anti-pigmentation routine with proven ingredients",
-      benefits: ["Brightening", "Even Skin Tone", "Reduces Dark Spots"],
-      ingredients: ["Vitamin C", "Alpha Arbutin", "Azelaic Acid"],
-      size: "Bundle",
-      inStock: true
-    },
-    {
-      id: "3",
-      name: "Clean 24-Hr Cream Eyeshadow",
-      brand: "Glossier",
-      price: 20,
-      image: "/api/placeholder/300/300",
-      rating: 4.4,
-      reviews: 567,
-      tags: ["Eye Bags", "Eye Wrinkles", "Acne"],
-      description: "Long-wearing cream eyeshadow with skincare benefits",
-      benefits: ["Hydrating", "Long-lasting", "Non-comedogenic"],
-      ingredients: ["Hyaluronic Acid", "Vitamin E", "Jojoba Oil"],
-      size: "0.2 oz",
-      inStock: true
-    },
-    {
-      id: "4",
-      name: "Anti-Aging Serum with Peptides",
-      brand: "Olay",
-      price: 125,
-      image: "/api/placeholder/300/300",
-      rating: 4.7,
-      reviews: 2103,
-      tags: ["Fine Wrinkles", "Deep Wrinkles"],
-      description: "Advanced peptide serum for visible wrinkle reduction",
-      benefits: ["Wrinkle Reduction", "Firming", "Hydrating"],
-      ingredients: ["Peptides", "Retinol", "Niacinamide"],
-      size: "1.0 oz",
-      inStock: true
-    },
-    {
-      id: "5",
-      name: "Clean Skin Gel Cleanser",
-      brand: "CeraVe",
-      price: 12,
-      image: "/api/placeholder/300/300",
-      rating: 4.5,
-      reviews: 3456,
-      tags: ["Eye Bags", "Eye Wrinkles", "Acne", "Oiliness"],
-      description: "Gentle gel cleanser that removes dirt and oil without stripping",
-      benefits: ["Gentle Cleansing", "Oil Control", "Non-drying"],
-      ingredients: ["Ceramides", "Hyaluronic Acid", "Niacinamide"],
-      size: "8.0 oz",
-      inStock: true
-    },
-    {
-      id: "6",
-      name: "Glowscreen Sunscreen SPF 40",
-      brand: "Supergoop!",
-      price: 40,
-      image: "/api/placeholder/300/300",
-      rating: 4.3,
-      reviews: 1890,
-      tags: ["Eye Bags", "Eye Wrinkles", "Deep Wrinkles"],
-      description: "Illuminating sunscreen with blue light protection",
-      benefits: ["UV Protection", "Blue Light Protection", "Glowing Finish"],
-      ingredients: ["Zinc Oxide", "Red Algae", "Coconut Water"],
-      size: "1.7 oz",
-      inStock: true
-    },
-    {
-      id: "7",
-      name: "Blending Brush Set",
-      brand: "Real Techniques",
-      price: 25,
-      image: "/api/placeholder/300/300",
-      rating: 4.6,
-      reviews: 743,
-      tags: ["Tools"],
-      description: "Professional blending brushes for flawless application",
-      benefits: ["Professional Quality", "Easy to Clean", "Durable"],
-      ingredients: ["Synthetic Bristles", "Aluminum Ferrule"],
-      size: "Set of 3",
-      inStock: true
-    },
-    {
-      id: "8",
-      name: "Active Eye Cream",
-      brand: "Kiehl's",
-      price: 32,
-      originalPrice: 38,
-      image: "/api/placeholder/300/300",
-      rating: 4.4,
-      reviews: 1124,
-      tags: ["Eye Wrinkles", "Dark Circles"],
-      description: "Intensive eye cream for dark circles and fine lines",
-      benefits: ["Dark Circle Reduction", "Anti-aging", "Hydrating"],
-      ingredients: ["Caffeine", "Vitamin C", "Hyaluronic Acid"],
-      size: "0.5 oz",
-      inStock: true
-    }
-  ];
+  // Fetch real recommendations from Python service based on metrics and concerns
+  useEffect(() => {
+    const fetchRecs = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const payload = {
+          metrics: metrics || { hydration: 60, elasticity: 60, uvProtection: 60, texture: 60, overallScore: 60 },
+          concerns: skinConcerns || [],
+          topK: 24
+        };
+        const res = await recommendProductsByAnalysis(payload);
+        const items = (res?.items || []).map((it: any, idx: number) => ({
+          id: it.id || String(idx),
+          name: it.name,
+          brand: it.brand || "",
+          price: typeof it.price === 'number' ? it.price : Number(it.price || 0),
+          image: it.image || "/api/placeholder/300/300",
+          rating: it.rating || 4.5,
+          reviews: it.reviews || 0,
+          tags: Array.isArray(it.tags) ? it.tags : [],
+          description: it.description || '',
+          benefits: [],
+          ingredients: Array.isArray(it.ingredients) ? it.ingredients : [],
+          size: "",
+          inStock: true
+        })) as Product[];
+        setProducts(items);
+      } catch (e: any) {
+        console.error(e);
+        setError(e?.message || 'Failed to load recommendations');
+        setProducts([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchRecs();
+  }, [JSON.stringify(metrics), JSON.stringify(skinConcerns)]);
 
-  const filteredProducts = filterTag 
-    ? products.filter(product => product.tags.includes(filterTag))
-    : products;
+  const filteredProducts = products
+    .filter((product) => !filterTag || product.tags.includes(filterTag))
+    .filter((product) => {
+      const q = searchQuery.trim().toLowerCase();
+      if (!q) return true;
+      return (
+        product.name.toLowerCase().includes(q) ||
+        product.brand.toLowerCase().includes(q) ||
+        product.tags.some((t) => t.toLowerCase().includes(q))
+      );
+    });
 
   const allTags = Array.from(new Set(products.flatMap(p => p.tags)));
 
@@ -213,9 +148,9 @@ const ProductRecommendations = ({ skinConcerns, userProfile, onBack, onNext }: P
           {/* Header */}
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center space-x-4">
-              <Button variant="ghost" onClick={onBack}>
+              {/* <Button variant="ghost" onClick={onBack}>
                 <ArrowLeft className="w-4 h-4" />
-              </Button>
+              </Button> */}
               <div>
                 <h1 className="text-3xl font-bold">Recommended Products</h1>
                 <p className="text-muted-foreground">
@@ -224,11 +159,21 @@ const ProductRecommendations = ({ skinConcerns, userProfile, onBack, onNext }: P
               </div>
             </div>
             <div className="flex items-center space-x-2">
-              <Button variant="outline">
+              <Button variant="outline" onClick={() => {
+                document.getElementById('filter-by-concern')?.scrollIntoView({ behavior: 'smooth' });
+              }}>
                 <Filter className="w-4 h-4 mr-2" />
                 Filter
               </Button>
-              <Button variant="outline">
+              <div className="hidden md:block">
+                <Input
+                  ref={searchInputRef}
+                  value={searchQuery}
+                  placeholder="Search products, brands, tags"
+                  className="w-64"
+                />
+              </div>
+              <Button variant="outline" onClick={() => searchInputRef.current?.focus()}>
                 <Search className="w-4 h-4 mr-2" />
                 Search
               </Button>
@@ -260,7 +205,7 @@ const ProductRecommendations = ({ skinConcerns, userProfile, onBack, onNext }: P
                 </Card>
 
                 {/* Filter by Concern */}
-                <Card>
+                <Card id="filter-by-concern">
                   <CardHeader>
                     <CardTitle className="text-lg">Filter by Concern</CardTitle>
                   </CardHeader>
@@ -320,16 +265,19 @@ const ProductRecommendations = ({ skinConcerns, userProfile, onBack, onNext }: P
                 <div>
                   <h2 className="text-xl font-semibold">Products That Work For You</h2>
                   <p className="text-muted-foreground">
-                    {filteredProducts.length} products found
+                    {loading ? 'Loading...' : `${filteredProducts.length} products found`}
                   </p>
                 </div>
-                <Button variant="outline">
+                <Button variant="outline" onClick={onNext}>
                   <Package className="w-4 h-4 mr-2" />
                   Routine
                 </Button>
               </div>
 
               <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
+                {!loading && error && (
+                  <div className="text-sm text-red-500">{error}</div>
+                )}
                 {filteredProducts.map((product) => (
                   <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow">
                     <div className="relative">
@@ -338,6 +286,7 @@ const ProductRecommendations = ({ skinConcerns, userProfile, onBack, onNext }: P
                         alt={product.name}
                         className="w-full h-48 object-cover"
                       />
+                      {/* Optional: show score or reason tags if available in future UI */}
                       {product.originalPrice && (
                         <Badge className="absolute top-2 left-2 bg-red-500">
                           Save ${product.originalPrice - product.price}

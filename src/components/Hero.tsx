@@ -1,8 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Camera, BarChart3, Shield } from "lucide-react";
 import heroImage from "@/assets/hero-skincare.jpg";
+import { useNavigate } from "react-router-dom";
 
 const Hero = () => {
+  const navigate = useNavigate();
   return (
     <section className="pt-[30px] pb-14 bg-gradient-to-br from-background via-accent/20 to-background">
       <div className="container mx-auto px-4">
@@ -48,6 +50,9 @@ const Hero = () => {
               <Button 
                 size="lg" 
                 className="bg-gradient-primary hover:shadow-glow transition-all duration-300 group"
+                onClick={() => {
+                  navigate('/analyze');
+                }}
               >
                 Start Free Analysis
                 <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
